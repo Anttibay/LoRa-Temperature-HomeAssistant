@@ -42,6 +42,10 @@ Not being electrical engineer either, I ended up with trial and error for the da
 
 **Code, compilation challenges and flashing**
 
-Arduino IDE was used to write and upload the code to the boards. There was a major challenge as, in my understanding the OneWire.h and Arduino.h libraries caused some sort of compatibility issue and utilizing both of those libraries caused compilation errors. I tried to troubleshoot this in multiple occasions as some people in the internet had tweaked the library codes and solved the issue. However, I found out (by luck) that compiling very simple code snippet with just the one of the libraries makes Arduino IDE utilize that compilation then from the cache and then we bypass the compilation error.
+Arduino IDE was used to write and upload the code to the boards. There was a major challenge as, in my understanding the OneWire.h and Arduino.h libraries caused some sort of compatibility issue and utilizing both of those libraries caused compilation errors. These were mainly "error: 'GPIO_IS_VALID_GPIO' was not declared in this scope;" or when calling digitalPinIsValid -macro.
+
+I tried to troubleshoot this in multiple occasions as some people in the internet had tweaked the library codes and solved the issue. However, I found out (by luck) that compiling very simple code snippet that includes OneWire.h library makes Arduino IDE to utilize that through precompilation which bypasses the errors when adding other libraries into the code.
+
+So if you cannot come up with a better solution. Just utilize init.ino example, compile and upload it to your board and then use the same sketchbook to modify the code to include other libraries and features. After some idle time or when using new sketch, it apparently needs to be done again this way.
 
 TBC...
