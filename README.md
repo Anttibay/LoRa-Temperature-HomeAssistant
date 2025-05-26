@@ -49,3 +49,7 @@ I tried to troubleshoot this in multiple occasions as some people in the interne
 So if you cannot come up with a better solution. Just utilize init.ino example, compile and upload it to your board and then use the same sketchbook to modify the code to include other libraries and features. After some idle time or when using new sketch, it apparently needs to be done again this way
 
 I utilized Heltec ESP32 Series Dev-boards by Heltec automation. There are plenty of guides in the internet how to get it in Arduino IDE. Also various libraries need to be installed using library manager.
+
+
+**Home Assistant**
+For publishing measurements to Home Assistant using the API, you need to generate long lived access token from your HA profile.
