@@ -1,83 +1,121 @@
-#include "LoRaWan_APP.h"
+#include "LoRaWan_APP.h"            // LoRa driver for Heltec boards
 #include "Arduino.h"
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include "esp_bt.h" //for shutting down Bluetooth
-#include "esp_wifi.h" //for shutting down WiFi
+#include <OneWire.h>                // For 1-Wire communication with DS18B20
+#include <DallasTemperature.h>      // DS18B20 temperature sensor library
+#include "esp_bt.h"                 // ESP32 Bluetooth control (power saving)
+#include "esp_wifi.h"               // ESP32 WiFi control (power saving)
 
-#define ONE_WIRE_BUS 7 //GPIO used to connect DS18B20 data wire
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
+// ===============================
+// DS18B20 Temperature Sensor Setup
+// ===============================
 
-#define RF_FREQUENCY 865000000 // Hz
-#define TX_OUTPUT_POWER 5 // dBm, optimizing this could lead to longer battery life
-#define LORA_BANDWIDTH 0
-#define LORA_SPREADING_FACTOR 7
-#define LORA_CODINGRATE 1
+#define ONE_WIRE_BUS 7              // GPIO pin connected to DS18B20 data line
+OneWire oneWire(ONE_WIRE_BUS);     // Create OneWire instance
+DallasTemperature sensors(&oneWire); // Pass OneWire to Dallas library
+
+// ===============================
+// LoRa Configuration
+// ===============================
+
+#define RF_FREQUENCY 865000000      // Frequency for EU868 band (Hz)
+#define TX_OUTPUT_POWER 5           // Transmission power in dBm
+#define LORA_BANDWIDTH 0            // 125 kHz bandwidth
+#define LORA_SPREADING_FACTOR 7     // SF7 for fast, short-range comms
+#define LORA_CODINGRATE 1           // 4/5 error correction
 #define LORA_PREAMBLE_LENGTH 8
 #define LORA_SYMBOL_TIMEOUT 0
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
-#define BUFFER_SIZE 30
+#define BUFFER_SIZE 30              // Max buffer for outgoing messages
 
+char txpacket[BUFFER_SIZE];         // Outgoing message buffer
 
-char txpacket[BUFFER_SIZE];
+// LoRa event structure
 static RadioEvents_t RadioEvents;
+
+// Function prototypes for LoRa TX events
 void OnTxDone(void);
 void OnTxTimeout(void);
 
+// ===============================
+// Setup
+// ===============================
+
 void setup() {
-  //Serial.begin(115200); can be used for troubleshooting and testing through serial connection, commented out for actual usage for battery life
-  setCpuFrequencyMhz(80); // Set CPU to 80 MHz for improved battery life
-  //delay(2000); can be used for troubleshooting and testing through serial connection,
-  //Serial.println("Booting and measuring temperature..."); can be used for troubleshooting and testing through serial connection,
+  // Serial can be useful for debugging, but disabled here for power saving
+  // Serial.begin(115200);
+
+  // Reduce CPU frequency to 80 MHz to lower power consumption
+  setCpuFrequencyMhz(80);
+
+  // Disable Bluetooth and WiFi completely
   btStop(); 
   esp_bt_controller_disable();
   esp_wifi_stop();
   esp_wifi_deinit();
 
+  // Initialize MCU and peripherals (Heltec board specifics)
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
+
+  // Initialize the temperature sensor
   sensors.begin();
 
-  // Take temperature reading
+  // Trigger temperature measurement
   sensors.requestTemperatures();
-  float tempC = sensors.getTempCByIndex(0);
+  float tempC = sensors.getTempCByIndex(0); // Get first sensor reading
 
-  // Format reading
-  snprintf(txpacket, BUFFER_SIZE, "XX01: %.2fC", tempC); //XX01 used as a prefix to discard other possible messages picked up by the receiver
-  //Serial.printf("Sending: \"%s\"\n", txpacket); can be used for troubleshooting and testing through serial connection,
+  // Format the packet to send
+  // "XX01" is a custom prefix to distinguish this sensor's data on the receiving side
+  snprintf(txpacket, BUFFER_SIZE, "XX01: %.2fC", tempC);
+  // Example: "XX01: 23.57C"
 
-  //Sending
+  // Set up LoRa event handlers
   RadioEvents.TxDone = OnTxDone;
   RadioEvents.TxTimeout = OnTxTimeout;
 
+  // Initialize the LoRa radio and configuration
   Radio.Init(&RadioEvents);
   Radio.SetChannel(RF_FREQUENCY);
   Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                     LORA_SPREADING_FACTOR, LORA_CODINGRATE, LORA_PREAMBLE_LENGTH,
                     LORA_FIX_LENGTH_PAYLOAD_ON, true, 0, 0,
-                    LORA_IQ_INVERSION_ON, 3000);
+                    LORA_IQ_INVERSION_ON, 3000); // 3000 ms timeout
 
+  // Transmit the temperature packet
   Radio.Send((uint8_t *)txpacket, strlen(txpacket));
 }
 
+// ===============================
+// Main loop (not used, but needed for IRQ processing)
+// ===============================
+
 void loop() {
+  // Required to handle interrupt-driven LoRa events
   Radio.IrqProcess();
 }
 
+// ===============================
+// LoRa Callback: Transmission Successful
+// ===============================
+
 void OnTxDone(void) {
- // Serial.println("TX done. Going to deep sleep for 1 minute...");
+  // Put radio to sleep to save power
   Radio.Sleep();
 
-  // 4 hours sleep
-  esp_sleep_enable_timer_wakeup(14400000000ULL);
+  // Enter deep sleep for 4 hours (14400 seconds)
+  esp_sleep_enable_timer_wakeup(14400000000ULL); // microseconds
   esp_deep_sleep_start();
 }
 
+// ===============================
+// LoRa Callback: Transmission Timeout
+// ===============================
+
 void OnTxTimeout(void) {
-  Serial.println("TX Timeout. Sleeping anyway...");
+  // Even if timeout occurs, go to sleep to conserve power
   Radio.Sleep();
 
-  esp_sleep_enable_timer_wakeup(60000000ULL);
+  // Sleep for 60 seconds before trying again (shorter duration in case of error)
+  esp_sleep_enable_timer_wakeup(60000000ULL); // microseconds
   esp_deep_sleep_start();
 }
